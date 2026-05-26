@@ -11,87 +11,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  Verifying:
-    if: github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    steps:
-      - name: Start verification
-        run: echo Verification Start
-
-      # Run assignment action
-      - name: Assign reviewers and assignees
-        uses: dm-vdo/vdo-auto-assign@main
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Remove all known labels
-        uses: buildsville/add-remove-label@v2.0.0
-        with:
-          token: ${{secrets.GITHUB_TOKEN}}
-          labels: untested, private testing running, private testing done, private testing failed
-          type: remove
-
-      - name: Add untested label
-        uses: buildsville/add-remove-label@v2.0.0
-        with:
-          token: ${{secrets.VDODEVEL}}
-          label: untested
-          type: add
-
-  Testing:
-    if: github.event.pull_request.draft == false
-    runs-on: [self-hosted, trusted]
-    needs: [Verifying]
-    steps:
-    - uses: actions/checkout@v2
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
-        path: dm-linux
-
-    - uses: actions/checkout@v2
-      with:
-        repository: ${{ github.event.repository.owner.login }}/vdo-devel
-        path: vdo-devel
-
-    - name: Add private testing running label
-      uses: buildsville/add-remove-label@v2.0.0
-      with:
-        token: ${{secrets.GITHUB_TOKEN}}
-        label: private testing running
-        type: add
-
-    - name: Start private testing
-      run: |
-        cd ${{ github.workspace }}/vdo-devel/src/
-        make DMLINUX_SOURCE_DIR=${{ github.workspace }}/dm-linux dmlinux-jenkins
-
-    - name: Copy log file to /permatbit/user/bunsen/artifacts
-      if: failure()
-      run: |
+  Run-Common-CI:
+    uses: dm-vdo/vdo-org-actions/.github/workflows/ci.yaml@main
+    with:
+      run-public: false
+      run-private: true
+      private-build-action: |
+        git clone https://github.com/${{ github.event.repository.owner.login }}/vdo-devel.git
+      private-tests-action: |
+        cd vdo-devel/src
+        make DMLINUX_SOURCE_DIR=${{ github.workspace }} dmlinux-jenkins
+      private-tests-action-failure: |
         REPO=${{ github.repository }}
         REPO=${REPO//\//-}
-        cp -a ${{ github.workspace }}/vdo-devel/logs /permabit/user/bunsen/artifacts/logs.`date +'%Y%m%d%H%M'`.$REPO.${{ github.event.number }}
-
-    - name: Remove private testing running label
-      if: always()
-      uses: buildsville/add-remove-label@v2.0.0
-      with:
-        token: ${{secrets.GITHUB_TOKEN}}
-        label: private testing running
-        type: remove
-
-    - name: Add private testing failed
-      if: failure()
-      uses: buildsville/add-remove-label@v2.0.0
-      with:
-        token: ${{secrets.GITHUB_TOKEN}}
-        label: private testing failed
-        type: add
-
-    - name: Add private testing success
-      if: success()
-      uses: buildsville/add-remove-label@v2.0.0
-      with:
-        token: ${{secrets.VDODEVEL}}
-        label: private testing done
-        type: add
+        cp -a vdo-devel/logs /permabit/user/bunsen/artifacts/logs.`date +'%Y%m%d%H%M'`.$REPO.${{ github.event.pull_request.number }}
+    secrets: inherit
