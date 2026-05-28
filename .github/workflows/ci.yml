@@ -25,4 +25,3 @@ jobs:
         REPO=${{ github.repository }}
         REPO=${REPO//\//-}
         cp -a vdo-devel/logs /permabit/user/bunsen/artifacts/logs.`date +'%Y%m%d%H%M'`.$REPO.${{ github.event.pull_request.number }}
-    secrets: inherit
