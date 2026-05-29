@@ -19,9 +19,7 @@ jobs:
       run-public-tests: false
       run-private-build: true
       run-private-tests: true
-      private-build-action: |
-        cd ${{ github.event.repository.name }}
-        make drivers/md/
+      private-build-action: make drivers/md/
       private-tests-action: |
         git clone https://github.com/${{ github.event.repository.owner.login }}/vdo-devel.git
         cd vdo-devel/src
