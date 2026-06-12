@@ -516,6 +516,45 @@ block_count_t vdo_compute_new_forest_pages(root_count_t root_count,
 }
 
 /**
+ * vdo_compute_writable_blocks() - Compute writable blocks for a VDO volume.
+ * @logical_blocks: The number of logical blocks to address.
+ * @data_blocks: The number of physical blocks available.
+ *
+ * Computes the number of data blocks we can actually write to after accounting for
+ * block map overhead needed to address the specified number of logical blocks. If
+ * logical_blocks is 0, use data_blocks as the logical space.
+ *
+ * Return: The number of writable blocks.
+ */
+block_count_t vdo_compute_writable_blocks(block_count_t logical_blocks,
+					  block_count_t data_blocks)
+{
+	block_count_t approximate_non_leaves;
+	page_count_t approximate_leaves;
+	struct boundary new_sizes;
+
+	if (logical_blocks == 0)
+		logical_blocks = data_blocks;
+
+	approximate_non_leaves =
+		vdo_compute_new_forest_pages(DEFAULT_VDO_BLOCK_MAP_TREE_ROOT_COUNT,
+					     NULL, logical_blocks, &new_sizes);
+
+	/*
+	 * Exclude the tree roots since those aren't allocated from slabs,
+	 * and also exclude the super-roots, which only exist in memory.
+	 */
+	approximate_non_leaves -=
+		DEFAULT_VDO_BLOCK_MAP_TREE_ROOT_COUNT *
+		(new_sizes.levels[VDO_BLOCK_MAP_TREE_HEIGHT - 2] +
+		 new_sizes.levels[VDO_BLOCK_MAP_TREE_HEIGHT - 1]);
+
+	approximate_leaves = vdo_compute_block_map_page_count(logical_blocks);
+
+	return data_blocks - (approximate_non_leaves + approximate_leaves);
+}
+
+/**
  * encode_recovery_journal_state_7_0() - Encode the state of a recovery journal.
  * @buffer: A buffer to store the encoding.
  * @offset: The offset in the buffer at which to encode.
