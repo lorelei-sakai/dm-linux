@@ -23,9 +23,10 @@ jobs:
         make defconfig
         yes "" | make drivers/md/
       private-tests-action: |
+        WORKSPACE=$(pwd)
         git clone https://github.com/${{ github.event.repository.owner.login }}/vdo-devel.git
         cd vdo-devel/src
-        make DMLINUX_SOURCE_DIR=${{ github.workspace }} dmlinux-jenkins
+        make DMLINUX_SOURCE_DIR=$WORKSPACE dmlinux-jenkins
       private-tests-action-failure: |
         REPO=${{ github.repository }}
         REPO=${REPO//\//-}
