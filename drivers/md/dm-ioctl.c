@@ -1754,30 +1754,6 @@ static int message_for_md(struct mapped_device *md, unsigned int argc, char **ar
 	return -EINVAL;
 }
 
-static int message_for_module(const char *target_name, unsigned int argc, char **argv,
-			      char *result, unsigned int maxlen)
-{
-	struct target_type *tt;
-	int r;
-
-	tt = dm_get_target_type(target_name);
-	if (!tt) {
-		DMERR("unknown target name %s", target_name);
-		return -EINVAL;
-	}
-
-	if (!tt->deviceless_message) {
-		DMERR("target %s doesn't support deviceless messages", target_name);
-		r = -EINVAL;
-	} else {
-		r = tt->deviceless_message(argc, argv, result, maxlen);
-	}
-
-	dm_put_target_type(tt);
-
-	return r;
-}
-
 /*
  * Pass a message to the target that's at the supplied device offset.
  */
@@ -1792,6 +1768,10 @@ static int target_message(struct file *filp, struct dm_ioctl *param, size_t para
 	size_t maxlen;
 	char *result = get_result_buffer(param, param_size, &maxlen);
 	int srcu_idx;
+
+	md = find_device(param);
+	if (!md)
+		return -ENXIO;
 
 	if (tmsg < (struct dm_target_msg *) param->data ||
 	    invalid_str(tmsg->message, (void *) param + param_size)) {
@@ -1812,25 +1792,9 @@ static int target_message(struct file *filp, struct dm_ioctl *param, size_t para
 		goto out_argv;
 	}
 
-	if (!strcmp(param->name, ".")) {
-		if (argc == 1) {
-			DMERR("Empty message received.");
-			r = -EINVAL;
-			goto out_argv;
-		}
-		r = message_for_module(argv[0], argc - 1, argv + 1, result, maxlen);
-		goto out_deviceless;
-	}
-
-	md = find_device(param);
-	if (!md) {
-		r = -ENXIO;
-		goto out_argv;
-	}
-
 	r = message_for_md(md, argc, argv, result, maxlen);
 	if (r <= 1)
-		goto out_md;
+		goto out_argv;
 
 	table = dm_get_live_table(md, &srcu_idx);
 	if (!table)
@@ -1852,13 +1816,14 @@ static int target_message(struct file *filp, struct dm_ioctl *param, size_t para
 		r = -EINVAL;
 	}
 
-out_table:
+ out_table:
 	dm_put_live_table(md, srcu_idx);
-out_md:
+ out_argv:
+	kfree(argv);
+ out:
 	if (r >= 0)
 		__dev_status(md, param);
-	dm_put(md);
-out_deviceless:
+
 	if (r == 1) {
 		param->flags |= DM_DATA_OUT_FLAG;
 		if (dm_message_test_buffer_overflow(result, maxlen))
@@ -1867,9 +1832,8 @@ out_deviceless:
 			param->data_size = param->data_start + strlen(result) + 1;
 		r = 0;
 	}
-out_argv:
-	kfree(argv);
-out:
+
+	dm_put(md);
 	return r;
 }
 
